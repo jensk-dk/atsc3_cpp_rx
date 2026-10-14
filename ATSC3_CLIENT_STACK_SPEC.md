@@ -1,6 +1,6 @@
 # ATSC 3.0 Client-Side Stack — Software Specification (C++17)
 
-Version 0.27 — 2026-10-14
+Version 0.28 — 2026-10-14
 Status: Draft for review
 
 This document specifies a receiver-side ("client") ATSC 3.0 protocol stack written in C++17.
@@ -2270,8 +2270,11 @@ No public link type exists for baseband packets. Define:
 The implementation lives in `implementation/` next to `specs/` (standards, with the schema release in `specs/schemas/`) and `samples/`.
 The PDFs and zips in `specs/` and everything in `samples/` are not in version control (root `.gitignore`); the root
 `setup.sh` creates them (README "Inputs"); `specs/schemas/`, which the unit tests read, is unpacked by
-`setup.sh --schemas` from the A/331 schema zip (5.16), and `ci.yml` runs that before building so the schema cases do
-not skip.
+`setup.sh --schemas` from the A/331 schema zip (5.16). The GitHub Actions workflows are at the repository root in
+`.github/workflows/`, the only place GitHub reads them from: `ci.yml` runs `./setup.sh --schemas` before building so
+the schema cases do not skip, and its `corpus` job fetches the captures with the repository secret
+`DEKTEC_FTP_PASSWORD` for the golden, tools and `[corpus]` tests (fork pull requests get no secrets, so that job skips
+its steps and stays green); `e2e.yml` is the nightly end-to-end run on a self-hosted runner.
 The root `README.md` is the quick start — what the project is, how to build and run every
 target and how to run the tests, with a Run section per program and integration — and changes in the same edit as
 anything it names; the ctest entry `docs.readme` (`scripts/readme-check.py`, label `docs`, in the default test run)
@@ -2385,9 +2388,9 @@ implementation/
 │   ├── format.sh  lint.sh         clang-format / clang-tidy / eslint / prettier drivers
 │   ├── corpus-check.sh            verifies ../samples presence + checksums before golden/e2e runs
 │   ├── readme-check.py            the root README.md against presets, options, flags, labels, paths, program coverage (ctest docs.readme)
-│   └── ci/                        pipeline entrypoints (build-matrix.sh, run-unit.sh, run-e2e.sh)
-├── .clang-format  .clang-tidy  .editorconfig  .gitignore  .gitattributes (pcap = binary)
-└── .github/workflows/  (or ci/)   ci.yml (build matrix + unit + golden), e2e.yml (web + vlc, self-hosted HEVC runner)
+│   └── ci/                        pipeline entrypoints (build-matrix.sh, run-golden.sh, run-e2e.sh) called by the
+│                                  workflows in the repository root's .github/workflows/ (ci.yml, e2e.yml)
+└── .clang-format  .clang-tidy  .editorconfig  .gitignore  .gitattributes (pcap = binary)
 ```
 
 

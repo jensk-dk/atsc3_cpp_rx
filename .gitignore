@@ -12,3 +12,6 @@ CMakeUserPresets.json
 *.swp
 *~
 \#*\#
+
+# Vendor SDKs kept beside the tree under their own licences (the Airwavz RedZone Receiver SDK may not be redistributed)
+airwavz_sdk/

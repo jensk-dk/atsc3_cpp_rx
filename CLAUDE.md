@@ -27,6 +27,14 @@ The repository holds:
   (the unit tests read it and skip when it is absent). Per the release notes the schemas take precedence over
   the A/331 text; typed structures in the spec are derived from them.
 - `samples/` — capture corpus (see below), also created by `setup.sh` and not versioned.
+- `.github/workflows/` — GitHub Actions, at the repository root because GitHub reads workflows from nowhere else.
+  `ci.yml` builds the debug, release and asan presets on every push and pull request after `./setup.sh --schemas`,
+  then its `corpus` job fetches the captures with the repository secret `DEKTEC_FTP_PASSWORD` and runs the golden,
+  tools and `[corpus]` tests; fork pull requests get no secret, so that job skips its steps and stays green.
+  `e2e.yml` is the nightly end-to-end run on a self-hosted runner.
+- `airwavz_sdk/` — the Airwavz RedZone Receiver USB tuner SDK (proprietary licence: ignored by git, never copy
+  anything from it into the tree or into a public page). It delivers Baseband Packets through a C callback and is the
+  Sony-demodulator path of spec Q1; a tuner for it would be an optional component that finds the SDK on the machine.
 
 - `implementation/` — the C++17 implementation (CMake). Implemented so far: the `io` layer (the delivery
   units — BBP, ALP packet, IP datagram with `UnitTime` and `L1Info` — and the IPv4/UDP/RTP header helpers; the capture

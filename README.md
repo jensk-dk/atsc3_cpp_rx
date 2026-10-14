@@ -236,6 +236,12 @@ channel, the banner and the present programme. It skips without the corpus or th
 Formatting and linting: `scripts/format.sh` (clang-format, prettier) and `scripts/lint.sh`
 (clang-tidy over `build/debug`, eslint).
 
+Continuous integration: `.github/workflows/ci.yml` builds the debug, release and asan presets and runs their unit
+tests on every push and pull request, after `./setup.sh --schemas`. Its `corpus` job then fetches the captures with
+the repository secret `DEKTEC_FTP_PASSWORD` and runs the golden, tools and corpus-tagged tests. Fork pull requests
+never receive secrets, so that job skips its steps instead of failing. `.github/workflows/e2e.yml` runs the
+end-to-end suites nightly on a self-hosted runner.
+
 ## Keeping this file current
 
 This README must change in the same edit as anything it describes: presets, options, targets,

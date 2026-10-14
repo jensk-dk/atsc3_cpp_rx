@@ -1,0 +1,44 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        preset: [debug, release, asan]
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y cmake g++ zlib1g-dev
+      - run: ./setup.sh --schemas   # specs/schemas/ is not versioned; the schema unit tests skip without it
+      - run: scripts/ci/build-matrix.sh ${{ matrix.preset }}
+        working-directory: implementation
+
+  # The golden, tools and [corpus] unit tests replay ../samples, whose DekTec captures sit behind an FTP password.
+  # That password is the repository secret DEKTEC_FTP_PASSWORD, which GitHub hands only to runs from this repository's
+  # own branches. A fork pull request gets an empty value, skips every step below and stays green, so this job checks
+  # our own pushes and does not gate contributions.
+  corpus:
+    runs-on: ubuntu-22.04
+    needs: build
+    timeout-minutes: 120
+    env:
+      DEKTEC_FTP_PASSWORD: ${{ secrets.DEKTEC_FTP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report a run without the secret
+        if: ${{ env.DEKTEC_FTP_PASSWORD == '' }}
+        run: echo "DEKTEC_FTP_PASSWORD is not available to this run (fork pull request, or the secret is not set); corpus tests skipped"
+      - name: Install packages
+        if: ${{ env.DEKTEC_FTP_PASSWORD != '' }}
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ zlib1g-dev lftp
+      - name: Fetch the schemas and the capture corpus
+        if: ${{ env.DEKTEC_FTP_PASSWORD != '' }}
+        run: ./setup.sh --schemas --samples --dektec   # about 2.9 GB from ftp.dektec.nl, checksums verified
+      - name: Build and run the unit tests with the corpus present
+        if: ${{ env.DEKTEC_FTP_PASSWORD != '' }}
+        run: scripts/ci/build-matrix.sh debug
+        working-directory: implementation
+      - name: Golden and tools tests
+        if: ${{ env.DEKTEC_FTP_PASSWORD != '' }}
+        run: scripts/ci/run-golden.sh debug && ctest --preset debug -L tools
+        working-directory: implementation

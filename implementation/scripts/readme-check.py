@@ -40,7 +40,7 @@ OPTIONS = "implementation/cmake/Options.cmake"
 PACKAGE_JSON = "implementation/integrations/web/frontend/package.json"
 PLAYWRIGHT = "implementation/integrations/web/frontend/playwright.config.ts"
 PATH_PREFIXES = ("implementation/", "tools/", "specs/", "tests/", "scripts/", "integrations/", "cmake/",
-                 "src/", "include/", "tuners/", "build/", "third_party/")
+                 "src/", "include/", "tuners/", "build/", "third_party/", ".github/")
 SKIP_PATH_PREFIXES = ("samples/", "../samples", "/abs/", "http://", "https://")
 GENERIC_FLAGS = {"--preset", "--build", "--install", "--component", "--project", "--sout", "--version"}
 IGNORED_DIRS = {"build", "node_modules", "dist", "__pycache__", ".git"}
