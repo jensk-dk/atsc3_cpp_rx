@@ -1,0 +1,16 @@
+# Build options for the ATSC 3.0 stack. Keep in sync with spec Section 8.
+option(ATSC3_BUILD_TOOLS "Build the standalone tools in tools/: atsc3scan, stltp2alp, routedump (atsc3d comes with ATSC3_WEB)" ON)
+option(ATSC3_BUILD_TESTS "Build unit, golden, round-trip and HTTP tests" ON)
+option(ATSC3_WEB "Build the optional web server library (atsc3::web)" OFF)
+option(ATSC3_VLC "Build the optional VLC demux plugin" OFF)
+option(ATSC3_SECURITY "Build the A/360 security module (needs OpenSSL)" OFF)
+option(ATSC3_FRONTEND "Build the Vue 3 frontend with npm and embed it into atsc3d" OFF)
+option(ATSC3_FUZZ "Build libFuzzer targets (clang only)" OFF)
+option(ATSC3_COVERAGE "Enable coverage instrumentation" OFF)
+option(ATSC3_FETCH_DEPS "Allow FetchContent to download missing dependencies" ON)
+option(ATSC3_TUNER_PCAP "Build the pcap virtual tuner (tuners/pcap): capture replay, needed by tools, tests, web and vlc" ON)
+option(ATSC3_TUNER_SONY "Build the Sony demodulator tuner (driver required)" OFF)
+set(ATSC3_SANITIZERS "" CACHE STRING "Comma-separated sanitizers: address,undefined,thread")
+set(ATSC3_CORPUS_DIR "${CMAKE_SOURCE_DIR}/../samples" CACHE PATH "Capture corpus for golden and e2e tests")
+set(ATSC3_SCHEMA_DIR "${CMAKE_SOURCE_DIR}/../specs/schemas" CACHE PATH "A/331 schemas and example instances")
+

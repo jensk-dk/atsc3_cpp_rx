@@ -1,0 +1,14 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        preset: [debug, release, asan]
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y cmake g++ zlib1g-dev
+      - run: ./setup.sh --schemas   # specs/schemas/ is not versioned; the schema unit tests skip without it
+      - run: scripts/ci/build-matrix.sh ${{ matrix.preset }}
+        working-directory: implementation

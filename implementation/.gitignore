@@ -1,0 +1,10 @@
+build/
+*.o
+*.a
+*.so
+compile_commands.json
+integrations/web/frontend/node_modules/
+integrations/web/frontend/dist/
+integrations/web/frontend/test-results/
+integrations/web/frontend/playwright-report/
+__pycache__/

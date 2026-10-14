@@ -1,0 +1,1 @@
+{ "programs_min": 5, "selected": "WBAL", "es": ["video hvc1", "encrypted"], "min_video_fragments": 6, "forbid": ["atsc3: error", "main input error"] }

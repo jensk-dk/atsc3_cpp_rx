@@ -1,0 +1,25 @@
+{
+  "name": "atsc3-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "dashjs": "^5.2.1",
+    "pinia": "^2.1.7",
+    "vue": "^3.4.21",
+    "vue-router": "^4.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.42.1",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "typescript": "^5.4.2",
+    "vite": "^6.4.4",
+    "vue-tsc": "^2.0.6"
+  }
+}

@@ -1,0 +1,214 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Debug (core + tools + tests)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "asan",
+      "inherits": "debug",
+      "cacheVariables": {
+        "ATSC3_SANITIZERS": "address,undefined"
+      }
+    },
+    {
+      "name": "ubsan",
+      "inherits": "debug",
+      "cacheVariables": {
+        "ATSC3_SANITIZERS": "undefined"
+      }
+    },
+    {
+      "name": "tsan",
+      "inherits": "debug",
+      "cacheVariables": {
+        "ATSC3_SANITIZERS": "thread"
+      }
+    },
+    {
+      "name": "coverage",
+      "inherits": "debug",
+      "cacheVariables": {
+        "ATSC3_COVERAGE": "ON"
+      }
+    },
+    {
+      "name": "fuzz",
+      "inherits": "debug",
+      "displayName": "Fuzz (needs clang)",
+      "cacheVariables": {
+        "ATSC3_FUZZ": "ON",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "web",
+      "inherits": "debug",
+      "cacheVariables": {
+        "ATSC3_WEB": "ON"
+      }
+    },
+    {
+      "name": "vlc",
+      "inherits": "debug",
+      "cacheVariables": {
+        "ATSC3_VLC": "ON"
+      }
+    },
+    {
+      "name": "full",
+      "inherits": "release",
+      "cacheVariables": {
+        "ATSC3_WEB": "ON",
+        "ATSC3_VLC": "ON",
+        "ATSC3_SECURITY": "ON",
+        "ATSC3_FRONTEND": "ON"
+      }
+    },
+    {
+      "name": "embedded-arm64",
+      "inherits": "release",
+      "displayName": "Cross build (toolchain file required)",
+      "cacheVariables": {
+        "ATSC3_BUILD_TESTS": "OFF",
+        "ATSC3_BUILD_TOOLS": "OFF",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/aarch64-linux-gnu.cmake"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan"
+    },
+    {
+      "name": "ubsan",
+      "configurePreset": "ubsan"
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan"
+    },
+    {
+      "name": "coverage",
+      "configurePreset": "coverage"
+    },
+    {
+      "name": "fuzz",
+      "configurePreset": "fuzz"
+    },
+    {
+      "name": "web",
+      "configurePreset": "web"
+    },
+    {
+      "name": "vlc",
+      "configurePreset": "vlc"
+    },
+    {
+      "name": "full",
+      "configurePreset": "full"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "ubsan",
+      "configurePreset": "ubsan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "coverage",
+      "configurePreset": "coverage",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "web",
+      "configurePreset": "web",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "vlc",
+      "configurePreset": "vlc",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "full",
+      "configurePreset": "full",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

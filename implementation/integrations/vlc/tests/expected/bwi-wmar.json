@@ -1,0 +1,2 @@
+{ "programs_min": 5, "selected": "WMAR", "es": ["video hvc1", "audio ac-4", "subtitles stpp"], "decoders": ["codec (hevc) started"], "first_picture": true,
+  "min_video_fragments": 6, "min_audio_fragments": 6, "epg_min_events": 1, "alerts_min": 1, "no_decoder": ["ac-4"] }

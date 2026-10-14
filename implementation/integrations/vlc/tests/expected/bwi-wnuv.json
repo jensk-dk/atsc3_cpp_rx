@@ -1,0 +1,2 @@
+{ "programs_min": 5, "selected": "WNUV", "es": ["video hev1", "audio ac-4"], "decoders": ["codec (hevc) started"], "first_picture": true,
+  "min_video_fragments": 4, "no_decoder": ["ac-4"] }

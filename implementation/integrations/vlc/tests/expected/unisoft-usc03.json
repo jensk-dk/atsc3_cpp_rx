@@ -1,0 +1,2 @@
+{ "programs_min": 3, "selected": "usc03", "es": ["video hev1", "audio mp4a", "subtitles stpp"], "decoders": ["codec (hevc) started"], "first_picture": false,
+  "min_video_fragments": 5, "min_subtitle_fragments": 3 }

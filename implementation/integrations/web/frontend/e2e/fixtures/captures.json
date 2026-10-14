@@ -1,0 +1,31 @@
+{
+  "bwi": {
+    "file": "dektec/ATSC3-STLTP/BWI_20230307_1742.pcap",
+    "services": [
+      "WBFF",
+      "WBAL",
+      "WMAR",
+      "ESG",
+      "WMPT",
+      "WNUV"
+    ]
+  },
+  "unisoft3": {
+    "file": "dektec/ATSC3-PCAP/UniSoft-3xROUTE-24-October-2019.pcap",
+    "services": [
+      "usc01",
+      "usc02",
+      "usc03",
+      "esg"
+    ]
+  },
+  "unisoftMmt": {
+    "file": "dektec/ATSC3-PCAP/UniSoft-2xROUTE+1MMT-5-November-2019.pcap",
+    "services": [
+      "usc01",
+      "usc02",
+      "usc03m",
+      "esg"
+    ]
+  }
+}

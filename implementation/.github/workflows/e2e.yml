@@ -1,0 +1,13 @@
+name: e2e
+on:
+  workflow_dispatch:
+  schedule: [{cron: '0 3 * * *'}]
+jobs:
+  web-and-vlc:
+    runs-on: [self-hosted, hevc]   # hardware HEVC decoding, corpus mounted at ../samples (spec Q9)
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/build-vlc4.sh "$HOME/.local/vlc4"
+        working-directory: implementation
+      - run: PKG_CONFIG_PATH=$HOME/.local/vlc4/lib/pkgconfig scripts/ci/run-e2e.sh
+        working-directory: implementation

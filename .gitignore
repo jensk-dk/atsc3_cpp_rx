@@ -1,0 +1,14 @@
+# Inputs that setup.sh creates (see README.md "Inputs"): specs/ (the ATSC standards, their schema zips and the schema
+# tree unpacked from them) and samples/ (every capture). Nothing under either directory is versioned.
+specs/
+samples/
+*.pcap
+*.pcapng
+
+# Editor and IDE state
+.history/
+.vscode/
+CMakeUserPresets.json
+*.swp
+*~
+\#*\#

@@ -1,0 +1,2 @@
+{ "programs_min": 3, "selected": "usc01", "es": ["video hev1.2.4.L150", "audio mp4a"], "decoders": ["codec (hevc) started"], "first_picture": true,
+  "min_video_fragments": 4, "min_audio_fragments": 4 }
