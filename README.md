@@ -5,9 +5,9 @@ Packets, ALP packets or IP datagrams) and turns it into typed signaling (LLS, RO
 tables), DASH segments, reconstructed MMT MPUs, NRT files, the OMA BCAST service guide, emergency
 alerts and A/344 broadcaster applications. A tuner feeds the stack from below; the pcap virtual
 tuner replays recorded broadcasts (ALP, STLTP or raw-IP captures) so everything runs on the
-capture corpus without hardware. Two integrations embed the stack: a daemon with a REST API and a
-Vue 3 web UI (service list, signaling, EPG, DASH/MSE playback, apps), and a VLC 3 plugin that plays
-the captures as programs.
+capture corpus without hardware. Three integrations embed the stack: a daemon with a REST API and a
+Vue 3 web UI (service list, signaling, EPG, DASH/MSE playback, apps), a VLC 3 plugin that plays the
+captures as programs, and a GStreamer set-top-box player with a channel list and a channel banner.
 
 `ATSC3_CLIENT_STACK_SPEC.md` is the specification and the source of truth for the architecture,
 module behaviour, layout and test strategy. This file is the quick start and is kept in step with
@@ -28,8 +28,8 @@ Inside `implementation/`: `src/` and `include/atsc3/` are the core library `atsc
 `tuners/pcap` is the pcap virtual tuner `atsc3::tuner_pcap` (`tuners/sony` is the placeholder for
 the first RF tuner); `tools/` holds the standalone programs `atsc3scan`, `stltp2alp` and
 `routedump` plus `tools/lib`, the `atsc3::tools` library they are built from and share with the tests; `integrations/web` is the
-web server, the daemon `atsc3d` and the frontend; `integrations/vlc` is the VLC plugin; `tests/`
-has the unit, golden, round-trip, HTTP, benchmark, fuzz and end-to-end suites.
+web server, the daemon `atsc3d` and the frontend; `integrations/vlc` is the VLC plugin; `integrations/stb` is the
+set-top-box player `atsc3stb`; `tests/` has the unit, golden, round-trip, HTTP, benchmark, fuzz and end-to-end suites.
 
 ## Inputs
 
@@ -56,6 +56,9 @@ DEKTEC_FTP_PASSWORD=... ./setup.sh --dektec   # non-interactive DekTec fetch; --
 - Web frontend and its Playwright tests: Node 20 or newer, then `npx playwright install firefox`.
 - VLC plugin: the VLC 3.0 plugin SDK from the distribution (`libvlccore-dev`, found through
   `pkg-config vlc-plugin`); its tests need `cvlc` and `libvlc.so.5` at run time.
+- Set-top-box player: GStreamer 1.20 and cairo development packages (`libgstreamer1.0-dev`,
+  `libgstreamer-plugins-base1.0-dev`, `libcairo2-dev`) and, at run time, the base, good, bad and libav plugin
+  sets (compositor, audiomixer, cairooverlay, decodebin, avdec_h265, avdec_aac, the auto sinks).
 - Python 3 (standard library only) for the README check and the VLC test harness; `curl` and `unzip` (or Python 3)
   for `setup.sh`.
 
@@ -68,6 +71,7 @@ cd implementation
 cmake --preset debug && cmake --build --preset debug      # core + tuners + tools + tests
 cmake --preset web   && cmake --build --preset web        # + web server, atsc3d daemon, HTTP tests
 cmake --preset vlc   && cmake --build --preset vlc        # + VLC plugin and its e2e test
+cmake --preset stb   && cmake --build --preset stb        # + the GStreamer set-top-box player atsc3stb and its e2e test
 cmake --preset asan  && cmake --build --preset asan       # debug with address + undefined sanitizers
 cmake --preset release && cmake --build --preset release
 ```
@@ -76,7 +80,7 @@ Other presets: `ubsan`, `tsan`, `coverage`, `fuzz` (clang, libFuzzer targets `fu
 `full` (release with web, VLC, security and the frontend built by CMake) and `embedded-arm64`
 (cross build, toolchain file required). The options behind the presets are in
 `implementation/cmake/Options.cmake`: `ATSC3_BUILD_TOOLS`, `ATSC3_BUILD_TESTS`,
-`ATSC3_TUNER_PCAP`, `ATSC3_TUNER_SONY`, `ATSC3_WEB`, `ATSC3_VLC`, `ATSC3_FRONTEND`,
+`ATSC3_TUNER_PCAP`, `ATSC3_TUNER_SONY`, `ATSC3_WEB`, `ATSC3_VLC`, `ATSC3_STB`, `ATSC3_FRONTEND`,
 `ATSC3_SECURITY`, `ATSC3_FUZZ`, `ATSC3_COVERAGE`, `ATSC3_SANITIZERS`, `ATSC3_FETCH_DEPS`,
 `ATSC3_CORPUS_DIR` (default `../samples`) and `ATSC3_SCHEMA_DIR` (default `../specs/schemas`).
 
@@ -126,35 +130,80 @@ query options (each also exists as `--atsc3-<name>`): `service` (service id or `
 UniSoft captures. `cmake --install build/vlc --component vlc-plugin` installs the module into
 VLC's plugin directory.
 
+### Set-top-box player (GStreamer)
+
+```bash
+cd implementation
+build/stb/integrations/stb/atsc3stb --service 2 ../samples/dektec/ATSC3-PCAP/UniSoft-3xROUTE-24-October-2019.pcap
+build/stb/integrations/stb/atsc3stb --service 5007 ../samples/dektec/ATSC3-STLTP/BWI_20230307_1742.pcap   # Sinclair WNUV (MMT): video only, AC-4 audio
+cmake --install build/stb --component stb                 # installs atsc3stb into bin/
+```
+
+`atsc3stb` plays a capture in a window the way a set-top box does: the stack on the pcap virtual tuner, GStreamer
+decoding of the tuned service's video and audio (software decoders unless `--hw-decode`), a vertical channel list on
+the left half of the screen and a channel banner at the bottom with the channel number and name, the clock, the
+present programme with a progress bar, the following programme and the codecs. The banner appears on every channel
+change and stays for `--banner-seconds` (5 s). Keys in the window (also `--keys` below):
+
+| Key | List closed | List open |
+|-----|-------------|-----------|
+| Up / Down | previous / next channel of the mux, wrapping | move the highlight |
+| Page Up / Page Down | same as Up / Down | move the highlight by a page |
+| Return (also `l`, Tab, Menu) | open the channel list on the tuned channel | tune the highlighted channel and close the list |
+| Escape | hide the banner | close the list |
+| `i` | show the banner | |
+| `q` | quit | quit |
+
+The list holds the ROUTE and MMT services of the mux that carry video or audio, with "(DRM)" on protected ones;
+hidden services appear with `--show-hidden`. Channel changes stay within the mux; there is no track selection and no
+broadcaster application. Flags: `--service ID|major.minor` (the channel to start on; the first one otherwise),
+`--size WxH` (1280x720), `--loop`, `--start S`, `--duration S` (exit after S seconds; otherwise at the end of the
+capture), `--banner-seconds S`, `--live-delay S` (lead of the data over the clock, twice the segment duration by
+default), `--sidecar auto|off|PATH` (DekTec `.xa3` profile for raw-IP captures), `--show-hidden`, `--no-esg` (no
+present/following), `--hw-decode`, `--video-sink NAME` and `--audio-sink NAME` (GStreamer sink elements;
+`fakevideosink` / `fakesink` run headless), `--keys "Down@5,Return@6"` (scripted key presses: GstNavigation key names
+at seconds) and `--verbose` (timeline, decoder choice, GStreamer warnings). It prints one line per channel list, tune,
+track verdict and present/following change, statistics per tune (decoded video frames, audio buffers) and a final
+`summary` line, which is what the end-to-end test reads; the exit status is 1 on a GStreamer error and 2 on bad
+arguments. AC-4 audio has no GStreamer decoder, so the Sinclair services play video only; the UniSoft services play
+with sound. The UniSoft ESG names channels 3.x while its SLT says 24.x, so that capture shows no programme
+information; the Sinclair capture does.
+
 ### Tools
 
 ```bash
 cd implementation
-build/debug/tools/atsc3scan/atsc3scan [--limit N] [--slt] [--sls] [--objs] [--mmt] ../samples/ch11-25-slt.pcap
-build/debug/tools/stltp2alp/stltp2alp [--bbp out.bbp.pcap] [--plp N] [--start S] [--duration S] in.pcap out.pcap
-build/debug/tools/routedump/routedump [--service ID] [--start S] [--duration S] [--no-nrt] in.pcap out-dir
+build/debug/tools/atsc3scan/atsc3scan [--limit N] [--start S] [--duration S] [--slt] [--sls] [--objs] [--mmt] [--probe N] [--sidecar FILE] ../samples/ch11-25-slt.pcap
+build/debug/tools/stltp2alp/stltp2alp [--bbp out.bbp.pcap] [--plp N] [--start S] [--duration S] [--force] [-q] in.pcap out.pcap
+build/debug/tools/routedump/routedump [--service ID] [--start S] [--duration S] [--no-nrt] [--no-unpack] [--no-sls] [--sidecar FILE] [-q] in.pcap out-dir
 ```
 
 `atsc3scan` is the inventory of a capture of any form: the format verdict, BBP and ALP header facts, the
 LMTs, the LLS tables, the UDP flow table, every LCT flow with its object completeness, every MMTP flow with
 its signaling, and the flows nothing claimed. It scans the first N records with `--limit`, prints the SLT XML
 with `--slt`, the SLS objects with `--sls`, every object with `--objs` and the MP tables and ATSC messages with
-`--mmt`; it exits with status 3 when a capture carries no ATSC 3.0 content. `stltp2alp` turns an STLTP capture
-into a DLT 289 ALP capture. `routedump` extracts every ROUTE service of a capture into
+`--mmt`; `--probe N` is the format detector's window in records; it exits with status 3 when a capture carries no
+ATSC 3.0 content. `stltp2alp` turns an STLTP capture into a DLT 289 ALP capture (`--force` skips the format
+detection and treats the input as STLTP). `routedump` extracts every ROUTE service of a capture into
 `out-dir/bsid-<bsid>/<serviceId>-<name>/` with a static `manifest.mpd` that VLC plays offline, the segments,
-the SLS fragments and the NRT files.
+the SLS fragments and the NRT files; `--no-nrt`, `--no-unpack` and `--no-sls` leave out the NRT files, the
+unpacking of packages and the SLS fragments. `--start S` and `--duration S` cut a window out of the capture,
+`--sidecar auto|off|FILE` names the DekTec `.xa3` profile of a raw-IP capture (default: the file beside it) and
+`-q` silences the summary.
 
 ## Tests
 
 ```bash
 cd implementation
 ctest --preset debug                      # unit, golden (the corpus inventory numbers), roundtrip, tools, bench, docs
-ctest --preset debug -L unit              # one label; others: golden, roundtrip, tools, bench, http, docs, e2e-vlc
+ctest --preset debug -L unit              # one label; others: golden, roundtrip, tools, bench, http, docs, e2e-vlc, e2e-stb
 build/debug/tests/unit/atsc3_unit "[lct]"           # one Catch2 tag or test case
 build/debug/tests/unit/atsc3_unit "~[corpus]"       # fast loop: skip the tests that read ../samples
+build/stb/tests/unit/atsc3_unit "[stb]"             # the set-top-box UI model: channel list, keys, banner, present/following
 ctest --preset asan                       # run before declaring a layer done
 ctest --preset web -L http                # REST contract tests against an in-process daemon
 ctest --preset vlc -R e2e.vlc             # VLC end-to-end suite, real-time replays, about 5 minutes
+ctest --preset stb -R e2e.stb             # set-top-box player end to end, headless real-time replays, about 2 minutes
 ```
 
 Tests tagged `[corpus]` and the golden, tools and end-to-end suites read `../samples` and skip
@@ -180,14 +229,20 @@ The VLC suite can also be run by hand with `tests/e2e/run-vlc.sh <plugin.so> <co
 are `integrations/vlc/tests/cvlc/run.sh` (headless cvlc scenarios checked against the log) and
 `integrations/vlc/tests/pyvlc/libvlc_test.py` (libvlc through ctypes).
 
+The set-top-box suite is `tests/e2e/run-stb.sh <atsc3stb> <corpus>`: headless runs of `atsc3stb` on the UniSoft,
+Sinclair and small ALP captures with scripted keys, checked against the log for decoded frames on every tuned
+channel, the banner and the present programme. It skips without the corpus or the GStreamer plugins.
+
 Formatting and linting: `scripts/format.sh` (clang-format, prettier) and `scripts/lint.sh`
 (clang-tidy over `build/debug`, eslint).
 
 ## Keeping this file current
 
 This README must change in the same edit as anything it describes: presets, options, targets,
-program names and flags, test labels, scripts and paths. The ctest entry `docs.readme` (label
-`docs`, script `implementation/scripts/readme-check.py`) fails when a preset, option, flag, MRL
-key, test label, test name, npm script, Playwright project or path named in a code block here no
-longer exists, so a stale README breaks the default test run. Prose is not checked; keep it short
-and update it by hand.
+program names and flags, test labels, scripts, paths and behaviour, and every new program or integration
+gets a Run section here (what it does, how to start it, its flags or keys, how it is tested). The ctest
+entry `docs.readme` (label `docs`, script `implementation/scripts/readme-check.py`) fails when a
+preset, option, flag, MRL key, test label, test name, npm script, Playwright project or path named
+here no longer exists, and when a program built under `tools/` or `integrations/`, a flag of its
+usage text or a VLC plugin option is not named here, so a stale or incomplete README breaks the
+default test run. Prose is not checked; keep it short and update it by hand.

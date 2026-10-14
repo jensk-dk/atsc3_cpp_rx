@@ -3,6 +3,7 @@ option(ATSC3_BUILD_TOOLS "Build the standalone tools in tools/: atsc3scan, stltp
 option(ATSC3_BUILD_TESTS "Build unit, golden, round-trip and HTTP tests" ON)
 option(ATSC3_WEB "Build the optional web server library (atsc3::web)" OFF)
 option(ATSC3_VLC "Build the optional VLC demux plugin" OFF)
+option(ATSC3_STB "Build the optional GStreamer set-top-box player atsc3stb (needs GStreamer 1.20 and cairo)" OFF)
 option(ATSC3_SECURITY "Build the A/360 security module (needs OpenSSL)" OFF)
 option(ATSC3_FRONTEND "Build the Vue 3 frontend with npm and embed it into atsc3d" OFF)
 option(ATSC3_FUZZ "Build libFuzzer targets (clang only)" OFF)

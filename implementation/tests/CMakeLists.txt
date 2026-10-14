@@ -1,4 +1,4 @@
-# Test tree (spec Section 9). ctest labels: unit, golden, roundtrip, tools, http, bench, docs, e2e-web, e2e-vlc.
+# Test tree (spec Section 9). ctest labels: unit, golden, roundtrip, tools, http, bench, docs, e2e-web, e2e-vlc, e2e-stb.
 include(Catch)
 include(Fuzzing)
 

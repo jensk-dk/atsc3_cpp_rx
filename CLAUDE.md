@@ -7,17 +7,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 An ATSC 3.0 client-side (receiver) protocol stack in C++17: the specification and its implementation.
 The repository holds:
 
-- `ATSC3_CLIENT_STACK_SPEC.md` — the specification (currently v0.25). It is the source of truth for
+- `ATSC3_CLIENT_STACK_SPEC.md` — the specification (currently v0.27). It is the source of truth for
   architecture, module behaviour, ingest formats, the pcap virtual tuner, the optional web server /
   Vue 3 frontend and VLC plugin integrations, test strategy and open questions (Section 11). Bump its
   version line at the top when editing it (git history is the change log); new findings from captures go
   into Section 3 ("Observed" notes) and Appendix B.
 - `README.md` — the quick start: what the project is, how to build and run every target and how to run the
-  tests. It must change in the same edit as anything it names: presets, options, targets, program names and
-  flags, MRL keys, test labels and names, scripts, paths. The ctest entry `docs.readme`
-  (`implementation/scripts/readme-check.py`, label `docs`, part of the default `ctest --preset debug` run) fails
-  when such a reference goes stale; prose is not checked, so update it by hand when behaviour it describes
-  changes, and keep it short.
+  tests, with a Run section for every program and integration (what it does, how to start it, its flags or keys,
+  how it is tested). The user wants it kept current as the project grows: it must change in the same edit as
+  anything it names or describes — presets, options, targets, program names and flags, MRL keys, test labels and
+  names, scripts, paths, behaviour. The ctest entry `docs.readme` (`implementation/scripts/readme-check.py`, label
+  `docs`, part of the default `ctest --preset debug` run) fails when such a reference goes stale and when a program
+  built under `tools/` or `integrations/`, a flag of its usage text or a VLC plugin option is not named in the
+  README; prose is not checked, so update it by hand when behaviour it describes changes, and keep it short.
 - `specs/` — ATSC standards as PDFs (A/300, A/321, A/322, A/324, A/330, A/331, A/332, A/337, A/344,
   A/360, …) and schema zips. Created entirely by the root `setup.sh` (README "Inputs"), not versioned.
 - `specs/schemas/` — the normative A/331 XML schemas, ABNF grammars and example instances, unpacked by
@@ -101,12 +103,28 @@ The repository holds:
   alerts. Run it with `VLC_PLUGIN_PATH=build/vlc/integrations/vlc cvlc 'atsc3:///abs/capture.pcap?service=5004'`
   (`pacing=nonrealtime` with `--sout` dumps faster than real time); tests: `integrations/vlc/tests/cvlc/run.sh`,
   `integrations/vlc/tests/pyvlc/libvlc_test.py` (ctypes on libvlc.so.5) and `tests/e2e/run-vlc.sh` (ctest `e2e.vlc`, ~5 min).
+  The set-top-box player (`integrations/stb`, preset `stb`, option `ATSC3_STB`, spec 5.20) is `atsc3stb`: the engine on
+  the pcap virtual tuner, GStreamer decoding in a window and a cairo-drawn STB UI (channel list on the left half,
+  channel banner with present/following at the bottom on every channel change; Return opens the list, Return in the list
+  tunes, Up/Down change channel otherwise, `i` shows the banner; no track selection, no apps). One
+  persistent pipeline (black `videotestsrc` + `compositor` + `cairooverlay` + video sink, silent `audiotestsrc` +
+  `audiomixer` + audio sink) keeps the window open; every decodable track of the tuned service is a branch
+  `appsrc → decodebin → convert → mixer pad` fed with `media::fragmentSamples()` on one timeline anchored to the
+  pipeline clock plus a live delay (the VLC plugin's scheme). `src/model.*` is the GStreamer-free UI model (unit tests
+  `[stb]`), `src/player.*` the pipeline, `src/overlay.*` the cairo drawing. Keys arrive as GstNavigation events from
+  the sink window; `--keys "Down@5,Return@6"` scripts them and `--video-sink fakevideosink --audio-sink fakesink`
+  runs headless, which is how `tests/e2e/run-stb.sh` (ctest `e2e.stb`, label `e2e-stb`, about 2 min) checks decoded
+  frames per tuned channel, the banner and the ESG. GStreamer facts learned: a branch added while another branch's
+  `decodebin` is still async must be set PLAYING explicitly (the pipeline reports PAUSED, `sync_state_with_parent`
+  leaves it dead); lock a branch's state before tearing it down or the pipeline's state continuation restarts it;
+  `appsrc` needs a `max-latency` or the mixers' latency query fails; hardware decoders are skipped unless
+  `--hw-decode` (the VA-API path produced garbage here); 10-bit HEVC decodes in software fine.
   Security is a placeholder.
   Layout and build rules are in spec Section 8.
   All implementation work goes in this directory, nothing at the repository root:
   `cmake --preset debug && cmake --build --preset debug && ctest --preset debug` (labels `unit`,
-  `golden`, `tools`, `http` (web preset), `e2e-web`, `e2e-vlc`); single Catch2 case: `build/debug/tests/unit/atsc3_unit "[lct]"`;
-  optional parts via `-DATSC3_WEB=ON -DATSC3_VLC=ON -DATSC3_FRONTEND=ON`; frontend:
+  `golden`, `tools`, `http` (web preset), `e2e-web`, `e2e-vlc`, `e2e-stb` (stb preset)); single Catch2 case: `build/debug/tests/unit/atsc3_unit "[lct]"`;
+  optional parts via `-DATSC3_WEB=ON -DATSC3_VLC=ON -DATSC3_STB=ON -DATSC3_FRONTEND=ON`; frontend:
   `cd implementation/integrations/web/frontend && npm ci && npm run build`. Dependencies (pugixml, Catch2, and
   cpp-httplib/IXWebSocket for `web`) are fetched from GitHub by CMake unless installed system-wide.
   Tests tagged `[corpus]` read `../samples` and skip when it is absent; `[pacing]` tests measure real

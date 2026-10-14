@@ -6,12 +6,15 @@
 What is verified, in the fenced ```bash blocks and in backticked tokens of the prose:
   - `cmake --preset X` / `ctest --preset X` name a configure/test preset of CMakePresets.json; `cmake --install
     DIR --component C` names a CPack component; `ctest -L X` a label and `ctest -R X` a registered test name
-  - every `--flag` given to atsc3d, atsc3scan, stltp2alp or routedump is one the program's source accepts; `--atsc3-<name>` flags and `atsc3://...?k=v` query keys exist in the VLC plugin
+  - every `--flag` given to atsc3d, atsc3scan, stltp2alp, routedump or atsc3stb is one the program's source accepts; `--atsc3-<name>` flags and `atsc3://...?k=v` query keys exist in the VLC plugin
   - `ATSC3_*` names are options of cmake/Options.cmake or appear in the implementation sources (environment
     variables such as ATSC3_E2E_PORT); `npm run X` is a package.json script; `--project=X` and
     `PLAYWRIGHT_PROJECT=X` are Playwright projects
   - paths under the repository exist (`build/<preset>/...` is checked against the preset and the target name
     instead, because build trees are not part of the checkout; `samples/` is skipped, the corpus is optional)
+  - the other way round, so that new work cannot go undocumented: every program built under implementation/tools or
+    implementation/integrations is in PROGRAM_SOURCES below and named in the README, every flag of its usage text
+    (except --help and --version) is mentioned, and every VLC plugin option appears as an MRL key or `--atsc3-` flag
 Prose is not checked beyond its backticked tokens.
 """
 import json
@@ -25,8 +28,11 @@ PROGRAM_SOURCES = {
     "atsc3scan": "implementation/tools/atsc3scan/main.cpp",
     "stltp2alp": "implementation/tools/stltp2alp/main.cpp",
     "routedump": "implementation/tools/routedump/main.cpp",
+    "atsc3stb": "implementation/integrations/stb/src/main.cpp",
     "setup.sh": "setup.sh",
 }
+PROGRAM_DIRS = ("implementation/tools", "implementation/integrations")
+UNDOCUMENTED_FLAGS_OK = {"--help", "--version"}
 VLC_MODULE = "implementation/integrations/vlc/src/module.cpp"
 VLC_MRL = "implementation/integrations/vlc/src/mrl.cpp"
 PRESETS = "implementation/CMakePresets.json"
@@ -57,8 +63,10 @@ class Checker:
         self.components = set(re.findall(r"COMPONENT\s+([A-Za-z0-9_-]+)", cmake_text))
         self.targets = set(re.findall(r"add_executable\(\s*(\w+)", cmake_text))
         self.targets.update(re.findall(r"OUTPUT_NAME\s+\"?(\w+)\"?", cmake_text))
-        self.program_flags = {name: set(re.findall(r"--[a-z][a-z0-9-]*", self.read(src)))
+        self.program_flags = {name: set(re.findall(r"--[a-z][a-z0-9-]*|(?<![\w-])-[A-Za-z](?![\w-])", self.read(src)))
                               for name, src in PROGRAM_SOURCES.items()}
+        self.usage_flags = {name: self.usage_flags_of(src) for name, src in PROGRAM_SOURCES.items()}
+        self.programs = self.program_targets()
         self.vlc_options = set(re.findall(r"add_\w+\(\s*\"atsc3-([a-z-]+)\"", self.read(VLC_MODULE)))
         self.mrl_keys = set(re.findall(r"k == \"([a-z-]+)\"", self.read(VLC_MRL)))
         self.npm_scripts = set(json.load(open(self.path(PACKAGE_JSON), encoding="utf-8")).get("scripts", {}))
@@ -80,6 +88,30 @@ class Checker:
                 if f == "CMakeLists.txt" or f.endswith(".cmake"):
                     chunks.append(open(os.path.join(base, f), encoding="utf-8", errors="replace").read())
         return "\n".join(chunks)
+
+    def program_targets(self):
+        """The add_executable targets of the program directories: what the README must describe."""
+        names = set()
+        for top in PROGRAM_DIRS:
+            for base, dirs, files in os.walk(self.path(top)):
+                dirs[:] = [d for d in dirs if d not in IGNORED_DIRS]
+                if "CMakeLists.txt" in files:
+                    text = open(os.path.join(base, "CMakeLists.txt"), encoding="utf-8", errors="replace").read()
+                    names.update(re.findall(r"add_executable\(\s*(\w+)", text))
+        return names
+
+    def usage_flags_of(self, rel):
+        """The flags a program documents itself: those on every line holding "usage:" and on the string literal or
+        comment lines that continue it (the usage() text of the C++ mains, the header comment of setup.sh)."""
+        flags, in_usage = set(), False
+        for line in self.read(rel).splitlines():
+            if in_usage and not line.strip().startswith(('"', "#", "//")):
+                in_usage = False
+            if "usage:" in line.lower():
+                in_usage = True
+            if in_usage:
+                flags.update(re.findall(r"--[a-z][a-z0-9-]*", line))
+        return flags - UNDOCUMENTED_FLAGS_OK
 
     def source_text(self):
         if self._source_text is None:
@@ -233,6 +265,34 @@ class Checker:
         elif "/" in token and not token.startswith(("http", "atsc3:", "/")):
             self.check_path(line, token, ".")
 
+    # --- coverage: what the tree has that the README must name ------------------------------------------------
+    @staticmethod
+    def line_naming(readme, name):
+        """The first README line naming `name` as a word (0 when none)."""
+        pattern = re.compile(r"(?<!\w)" + re.escape(name) + r"(?!\w)")
+        for n, raw in enumerate(readme, 1):
+            if pattern.search(raw):
+                return n
+        return 0
+
+    def check_coverage(self, readme):
+        text = "\n".join(readme)
+        mentioned_flags = set(re.findall(r"--[a-z][a-z0-9-]*", text))
+        tokens = {t.strip() for t in re.findall(r"`([^`\n]+)`", text)}
+        for name in sorted(self.programs):
+            line = self.line_naming(readme, name)
+            self.expect(line, name in PROGRAM_SOURCES,
+                        f"program {name} is not in PROGRAM_SOURCES of readme-check.py (add it and describe it here)")
+            self.expect(line, line > 0, f"program {name} is built but not described in the README")
+        for name, flags in sorted(self.usage_flags.items()):
+            line = self.line_naming(readme, name)
+            for flag in sorted(flags):
+                self.expect(line, flag in mentioned_flags, f"{name} accepts {flag} but the README does not mention it")
+        line = self.line_naming(readme, "atsc3://")
+        for opt in sorted(self.vlc_options):
+            ok = any(t == opt or t.startswith(opt + "=") or t == f"--atsc3-{opt}" for t in tokens)
+            self.expect(line, ok, f"VLC plugin option {opt} is not mentioned in the README (`{opt}` or `--atsc3-{opt}`)")
+
     def run(self):
         readme = self.read("README.md").splitlines()
         in_block, base = False, "."
@@ -245,6 +305,7 @@ class Checker:
             else:
                 for token in re.findall(r"`([^`]+)`", raw):
                     self.check_prose_token(n, token.strip())
+        self.check_coverage(readme)
         return self.problems
 
 

@@ -84,6 +84,14 @@
       }
     },
     {
+      "name": "stb",
+      "inherits": "debug",
+      "displayName": "stb",
+      "cacheVariables": {
+        "ATSC3_STB": "ON"
+      }
+    },
+    {
       "name": "full",
       "inherits": "release",
       "cacheVariables": {
@@ -140,6 +148,10 @@
     {
       "name": "vlc",
       "configurePreset": "vlc"
+    },
+    {
+      "name": "stb",
+      "configurePreset": "stb"
     },
     {
       "name": "full",
@@ -199,6 +211,13 @@
     {
       "name": "vlc",
       "configurePreset": "vlc",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "stb",
+      "configurePreset": "stb",
       "output": {
         "outputOnFailure": true
       }

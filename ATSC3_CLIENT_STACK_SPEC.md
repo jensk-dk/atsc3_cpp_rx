@@ -1,6 +1,6 @@
 # ATSC 3.0 Client-Side Stack — Software Specification (C++17)
 
-Version 0.25 — 2026-10-14
+Version 0.27 — 2026-10-14
 Status: Draft for review
 
 This document specifies a receiver-side ("client") ATSC 3.0 protocol stack written in C++17.
@@ -41,6 +41,7 @@ implementation handles what real broadcasts actually do, not only what the stand
    - 5.17 Optional web server (`atsc3::web`)
    - 5.18 Optional Vue 3 frontend and end-to-end tests
    - 5.19 Optional VLC plugin (`atsc3://` demux module)
+   - 5.20 Optional GStreamer set-top-box player (`atsc3stb`)
 6. Data conversion and analysis tools
 7. Non-functional requirements
 8. Project layout, build and dependencies
@@ -388,7 +389,7 @@ Key findings that shape the design:
 
 The two boxes below the Application API are **integrations**: programs that embed the stack, drive it through
 the public API and present the services through an interface of their own — today the web server with its daemon
-and frontend (5.17, 5.18) and the VLC plugin (5.19), later a DTV middleware. They live under
+and frontend (5.17, 5.18), the VLC plugin (5.19) and the GStreamer set-top-box player (5.20), later a DTV middleware. They live under
 `implementation/integrations/` (Section 8), consume only the public API, and nothing in the core depends on them.
 Tuners (5.1, implementations under `tuners/`) feed the stack from below, integrations consume it from above, and the test-only
 drivers (the cvlc runner, Playwright, `RecordingSink`) are harnesses.
@@ -2136,6 +2137,84 @@ FIFOs during the initial buffering and is benign.
 
 ---
 
+### 5.20 Optional GStreamer set-top-box player (`atsc3stb`)
+
+The third integration (4.1), under `integrations/stb/` and enabled with `ATSC3_STB=ON` (preset `stb`): a Linux
+program that plays a capture the way a set-top box does — the stack on the pcap virtual tuner (5.1.2), GStreamer
+decoding of the tuned service's video and audio in a window, and a minimal STB user interface drawn on the video.
+It changes channels within the current mux only; it has no track selection and does not run broadcaster
+applications (5.18.4).
+
+#### 5.20.1 User interface
+
+- **Channel list**: the A/V services of the mux (ROUTE and MMTP services of category 1 or 2 or with a video or audio
+  component; hidden services only with `--show-hidden`), sorted by channel number, as a vertical list on the left
+  half of the screen with a highlighted row, a marker on the playing channel, "(DRM)" on protected services and a
+  scroll indicator. Return (also `l`, Menu, Tab) opens it on the tuned channel; Up/Down move the highlight, Page
+  Up/Down by a page (clamped), Return tunes the highlighted channel and closes the list, Escape closes it.
+- **Channel banner**: shown for `--banner-seconds` (5 s) on every channel change and on `i`: channel
+  number and name, the capture clock, the present programme with its window and a progress bar, the following
+  programme, and the codecs of the tracks. While nothing plays a status ("Tuning…", "No decoder for ac-4.02.01.01")
+  is part of the banner, or a small pill in the corner once the banner is gone.
+- With the list hidden, Up/Down (and Page Up/Down) change channel with wrap-around, Escape hides the banner, `q`
+  quits; closing the window quits.
+- Present/following come from the ESG (5.17.5): the ESG Service is matched by globalServiceID, else by major.minor,
+  and the instant is the capture clock (`Status::capture_unix_ns`). Observed: the UniSoft ESG names its services
+  `urn:atsc:serviceid:r1`–`r3` with channels 3.1–3.3 while its SLT carries `urn:atsc:serviceid:usc01`–`usc03` and
+  24.1–24.3, so that capture shows "No programme information"; the Sinclair capture matches by globalServiceID.
+- The model (`src/model.*`: channel list from the service table, key handling, banner timer, present/following) is
+  GStreamer-free and unit-tested (`[stb]`); `src/overlay.*` draws a `UiSnapshot` with cairo on every frame.
+
+#### 5.20.2 Pipeline and timeline
+
+- One persistent pipeline keeps the window and the audio device open across channel changes:
+  `videotestsrc` (black, 60 fps) and the decoded video → `compositor` → `videoconvert` → `cairooverlay` (the UI) →
+  `videoconvert` → video sink; `audiotestsrc` (silence) and the decoded audio → `audiomixer` → `audioconvert` →
+  `audioresample` → audio sink. The sinks default to `autovideosink` / `autoaudiosink`; `--video-sink fakevideosink
+  --audio-sink fakesink` runs headless. The silence source keeps the audio clock running when a service has no
+  decodable audio.
+- A channel change deselects the old service, selects the new one and drops every branch. As the engine delivers
+  init segments (`Engine::media` representations, `Engine::mmtMedia` components) a branch per decodable video or
+  audio track is added: `appsrc` with caps from `media::decoderConfigs()` (`video/x-h265` with the hvcC payload as
+  `codec_data`, `video/x-h264`, `audio/mpeg` mpegversion 4 with the AudioSpecificConfig, AC-3/E-AC-3, `audio/x-ac4`
+  named only so that the verdict can say "no decoder") → `decodebin` → convert and scale (video) or convert and
+  resample (audio) → a request pad of the mixer (video: the full frame, zorder 1, aspect ratio kept). Tracks
+  without a decoder (AC-4 everywhere), encrypted tracks and subtitles are reported and skipped. Hardware decoders
+  (`GST_ELEMENT_FACTORY_TYPE_HARDWARE`) are skipped unless `--hw-decode`: the VA-API path produced garbage on the
+  development machine while the software decoders handle 10-bit HEVC.
+- Feeding is the VLC plugin's scheme (5.19.2): the samples of every fragment (`media::fragmentSamples()`) become
+  buffers with DTS/PTS on one timeline whose media time is anchored to the pipeline's running time plus a live
+  delay at the first fragment (`--live-delay`, default twice the segment duration within 1.5–2.5 s); MMT fragments
+  use the engine's service-timeline start. Data behind the clock re-anchors (timestamps jump forward), data more
+  than 30 s ahead restarts the branches on a fresh anchor; loop wraps and MMT generation changes restart them too.
+- GStreamer facts the implementation depends on: a branch added while another branch's `decodebin` is still
+  completing its asynchronous state change must be set PLAYING explicitly (the pipeline reports PAUSED and
+  `gst_element_sync_state_with_parent` leaves the new branch's `appsrc` idle); a branch is torn down with its state
+  locked, set to NULL, unlinked, its mixer pad released and then removed, otherwise the pipeline's state
+  continuation restarts it; `appsrc` carries a `max-latency` (2 s) or the mixers' latency query fails; keys arrive as
+  GstNavigation key-press events that the X11, GL and Wayland sinks send upstream, caught by a pad probe on the
+  overlay and handed to the main loop.
+
+#### 5.20.3 Program, build and tests
+
+- `atsc3stb [options] <capture>`: `--service ID|major.minor` (the first channel otherwise; an unknown service
+  falls back to the first channel after 15 s), `--size WxH` (1280x720), `--loop`, `--start S`, `--duration S`,
+  `--banner-seconds S`, `--live-delay S`, `--sidecar auto|off|PATH`, `--show-hidden`, `--no-esg`, `--hw-decode`,
+  `--video-sink`, `--audio-sink`, `--keys "Down@5,Return@6"` (GstNavigation key names at seconds, for tests) and
+  `--verbose` (timeline, decoder choice, GStreamer warnings; with `GST_DEBUG_DUMP_DOT_DIR` set the graph is dumped
+  once video flows). It prints one line per channel list, tune, track verdict and present/following change,
+  per-tune statistics (video frames at the compositor, audio buffers at the mixer) and a final `summary` line;
+  exit status 1 on a GStreamer error, 2 on bad arguments.
+- Build: `pkg-config` for gstreamer-1.0 ≥ 1.20, gstreamer-app-1.0, gstreamer-video-1.0 and cairo; targets
+  `atsc3_stb_model` (static, linked by `atsc3_unit`) and `atsc3stb` (`build/stb/integrations/stb/atsc3stb`, install
+  component `stb`).
+- Tests: the `[stb]` unit cases (channel list from the service table, keys with the list hidden and shown, banner
+  timer, present/following, key names) and `tests/e2e/run-stb.sh <atsc3stb> <corpus>` (ctest `e2e.stb`, label
+  `e2e-stb`, skip code 77 without the corpus or the plugins): headless real-time replays — UniSoft usc02 with Up and
+  a list-driven tune back (three tunes, decoded frames on the first two channels, four keys, banners), BWI WNUV over
+  MMT (frames, AC-4 reported without a decoder, a present programme from the ESG) and the small ALP sample (channel
+  list, clean exit).
+
 ## 6. Data conversion and analysis tools
 
 Needed because (a) the sample set covers only DLT 289, (b) tuners deliver two different units,
@@ -2194,15 +2273,17 @@ The PDFs and zips in `specs/` and everything in `samples/` are not in version co
 `setup.sh --schemas` from the A/331 schema zip (5.16), and `ci.yml` runs that before building so the schema cases do
 not skip.
 The root `README.md` is the quick start — what the project is, how to build and run every
-target and how to run the tests — and changes in the same edit as anything it names; the ctest entry `docs.readme`
-(`scripts/readme-check.py`, label `docs`, in the default test run) fails when a preset, option, program flag, MRL key,
-test label or name, npm script, Playwright project or path it names no longer exists. Its prose is not checked.
+target and how to run the tests, with a Run section per program and integration — and changes in the same edit as
+anything it names; the ctest entry `docs.readme` (`scripts/readme-check.py`, label `docs`, in the default test run)
+fails when a preset, option, program flag, MRL key, test label or name, npm script, Playwright project or path it
+names no longer exists, and when a program built under `tools/` or `integrations/`, a flag of its usage text or a
+VLC plugin option is not named in it. Its prose is not checked.
 Everything is driven by one CMake tree with presets; the frontend is an npm project that CMake can
 invoke but does not require. The core (`src/`, `include/`) is what applications link, together with a tuner
 implementation from `tuners/` (the pcap virtual tuner for replay, a vendor tuner on a device); `tools/` holds the
 standalone programs and `tools/lib`, the `atsc3::tools` library they are built from and the tests link; the **integrations** under `integrations/` (the web server with its daemon and frontend, the
 VLC plugin) are complete programs that embed the stack and present it through an interface of their own (4.1) —
-they consume only the public API and are built only with their option (`ATSC3_WEB`, `ATSC3_VLC`).
+they consume only the public API and are built only with their option (`ATSC3_WEB`, `ATSC3_VLC`, `ATSC3_STB`).
 
 ```
 implementation/
@@ -2210,7 +2291,7 @@ implementation/
 ├── CMakePresets.json               configure/build/test presets: debug, release, asan, ubsan, tsan,
 │                                   coverage, fuzz (clang), web, vlc, full, embedded-arm64
 ├── cmake/
-│   ├── Options.cmake               ATSC3_BUILD_TOOLS, ATSC3_BUILD_TESTS, ATSC3_TUNER_PCAP, ATSC3_TUNER_SONY, ATSC3_WEB, ATSC3_VLC,
+│   ├── Options.cmake               ATSC3_BUILD_TOOLS, ATSC3_BUILD_TESTS, ATSC3_TUNER_PCAP, ATSC3_TUNER_SONY, ATSC3_WEB, ATSC3_VLC, ATSC3_STB,
 │   │                               ATSC3_SECURITY (OpenSSL), ATSC3_FRONTEND (npm build), ATSC3_FUZZ,
 │   │                               ATSC3_SANITIZERS, ATSC3_COVERAGE, ATSC3_CORPUS_DIR (default ../samples)
 │   ├── CompilerWarnings.cmake      -Wall -Wextra -Wpedantic -Werror, per-target function atsc3_set_warnings()
@@ -2273,13 +2354,17 @@ implementation/
 │   │       │          MsePushPlayer), a344/ (receiver host, key router), views/, components/, router/, App.vue, main.ts
 │   │       ├── public/a344-shim.js
 │   │       └── e2e/   Playwright specs (discovery, playback, epg, alerts, source, apps)
-│   └── vlc/       ATSC3_VLC — atsc3_vlc_plugin → libatsc3_plugin.so (5.19, VLC 3.0 line)
+│   ├── vlc/       ATSC3_VLC — atsc3_vlc_plugin → libatsc3_plugin.so (5.19, VLC 3.0 line)
 │       ├── CMakeLists.txt         FindVLCPlugin, install to ${VLC_PLUGINSDIR}/access
 │       ├── src/   module.cpp (descriptor, options), demux.cpp (programs, feeding, timeline, controls), es_mapper.cpp,
 │       │          epg.cpp, alerts.cpp, mrl.cpp (VLC-free, unit-tested)
 │       └── tests/ cvlc/ (run.sh + check_log.py log matchers), pyvlc/ (libvlc ctypes scenario), expected/*.json
+│   └── stb/       ATSC3_STB — atsc3stb (5.20, GStreamer 1.20 + cairo): the set-top-box player
+│       ├── CMakeLists.txt         pkg-config gstreamer-1.0/-app/-video + cairo; atsc3_stb_model (unit-tested), atsc3stb
+│       └── src/   model.cpp (channel list, keys, banner, present/following; GStreamer-free), player.cpp (pipeline,
+│                  branches, timeline), overlay.cpp (cairo drawing), main.cpp (options, polling, scripted keys)
 ├── tests/
-│   ├── CMakeLists.txt              registers ctest labels: unit, golden, roundtrip, tools, http, fuzz, bench, docs, e2e-web, e2e-vlc;
+│   ├── CMakeLists.txt              registers ctest labels: unit, golden, roundtrip, tools, http, fuzz, bench, docs, e2e-web, e2e-vlc, e2e-stb;
 │   │                               docs.readme runs scripts/readme-check.py over the root README.md
 │   ├── support/   test_main.cpp, pcap_builder, packet_builders (alp/bbp/lct/mmtp/stltp), fake_tuner,
 │   │              event_recorder (serializes IEventSink calls), corpus.hpp (ATSC3_CORPUS_DIR lookup)
@@ -2299,7 +2384,7 @@ implementation/
 │   ├── gen-ts-types.py            public API → TypeScript types for frontend/src/api
 │   ├── format.sh  lint.sh         clang-format / clang-tidy / eslint / prettier drivers
 │   ├── corpus-check.sh            verifies ../samples presence + checksums before golden/e2e runs
-│   ├── readme-check.py            the root README.md against presets, options, flags, labels, paths (ctest docs.readme)
+│   ├── readme-check.py            the root README.md against presets, options, flags, labels, paths, program coverage (ctest docs.readme)
 │   └── ci/                        pipeline entrypoints (build-matrix.sh, run-unit.sh, run-e2e.sh)
 ├── .clang-format  .clang-tidy  .editorconfig  .gitignore  .gitattributes (pcap = binary)
 └── .github/workflows/  (or ci/)   ci.yml (build matrix + unit + golden), e2e.yml (web + vlc, self-hosted HEVC runner)
@@ -2310,9 +2395,9 @@ Build system rules:
 
 - `CMakeLists.txt` requires CMake ≥ 3.21 (presets v3), C++17 without extensions, and defines the
   options in `cmake/Options.cmake`. Default build: core + tools + tests. `-DATSC3_WEB=ON`,
-  `-DATSC3_VLC=ON`, `-DATSC3_FRONTEND=ON` add the optional parts.
+  `-DATSC3_VLC=ON`, `-DATSC3_STB=ON`, `-DATSC3_FRONTEND=ON` add the optional parts.
 - Targets and namespaces: `atsc3::core` (every `src/` layer, `esg` included), `atsc3::tuner_pcap`, `atsc3::tools`, `atsc3::web`,
-  executables `atsc3d`, `atsc3scan`, `stltp2alp`, `routedump`, `atsc3_vlc_plugin`, test executables
+  executables `atsc3d`, `atsc3scan`, `stltp2alp`, `routedump`, `atsc3stb`, `atsc3_vlc_plugin`, test executables
   `atsc3_unit`, `atsc3_golden`, `atsc3_roundtrip`, `atsc3_http`, fuzz targets `fuzz_<parser>`.
 - Each `src/<layer>` is an OBJECT library with its own `CMakeLists.txt` so a layer can be built and
   unit-tested in isolation; only `include/atsc3` is public, everything under `src/` is private.
@@ -2336,7 +2421,8 @@ Dependencies (all optional except zlib and the XML parser):
   (test-time schema validation only), cpp-httplib and IXWebSocket (only with `ATSC3_WEB=ON`),
   Node 20 / Vite / Vue 3 / Pinia / dash.js / Playwright (frontend and e2e only, never linked into the stack),
   libvlccore and the plugin headers from the VLC 3.0 line (`pkg-config vlc-plugin` or the source tree, 5.19.4; only with
-  `ATSC3_VLC=ON`),
+  `ATSC3_VLC=ON`), GStreamer 1.20 (gstreamer-1.0, gstreamer-app-1.0, gstreamer-video-1.0) and cairo (only with
+  `ATSC3_STB=ON`; the base, good, bad and libav plugins at run time),
   OpenSSL ≥ 1.1 (security module), libpcap (live capture only), a RaptorQ library (Phase 3).
   ROHC-U is implemented in-house (5.5.2); no external ROHC library.
 - No Boost. No C++20 features (std::span, ranges, coroutines).
@@ -2377,6 +2463,9 @@ function documents its spec table, `[[nodiscard]]` on `Result`, no raw `new`.
    also the web server's REST/SSE contract is covered by HTTP-level tests without a browser.
 10. **VLC plugin tests** (5.19.5): `cvlc` log-driven and python-vlc driven playback of the corpus
    through the `atsc3://` demux module; both this suite and the web suite must pass for a release.
+11. **Set-top-box player tests** (5.20.3): the `[stb]` unit cases of the UI model and `tests/e2e/run-stb.sh` (ctest
+    `e2e.stb`): headless real-time replays with scripted keys, checked for decoded frames on every tuned channel,
+    the banner and the present programme from the ESG.
 
 Large-capture golden expectations (first 320 000 tunnel packets of the BWI feed, ~144 s): 73 046 BBPs
 (PLP 0: 3424, PLP 1: 17 120, PLP 2: 52 502), 282 642 ALP packets (280 930 IPv4, 1712 LMT), 2333

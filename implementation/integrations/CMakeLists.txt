@@ -2,9 +2,13 @@
 # Each is optional and consumes only the public API; nothing in src/ or tools/ depends on them.
 #   web/  atsc3::web (cpp-httplib REST + media origins), the atsc3d daemon and the Vue 3 frontend   ATSC3_WEB
 #   vlc/  atsc3_vlc_plugin, the VLC access-demux module                                               ATSC3_VLC
+#   stb/  atsc3stb, the GStreamer set-top-box player (window, channel list, banner)                   ATSC3_STB
 if(ATSC3_WEB)
   add_subdirectory(web)
 endif()
 if(ATSC3_VLC)
   add_subdirectory(vlc)
+endif()
+if(ATSC3_STB)
+  add_subdirectory(stb)
 endif()
