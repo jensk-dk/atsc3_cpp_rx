@@ -16,4 +16,6 @@ if(ATSC3_STB)
   target_compile_definitions(atsc3_unit PRIVATE ATSC3_HAVE_STB_MODEL=1)
 endif()
 atsc3_set_test_warnings(atsc3_unit)
-catch_discover_tests(atsc3_unit PROPERTIES LABELS unit)
+# SKIP_RETURN_CODE 4: Catch2 exits with 4 when every selected case called SKIP() (the [corpus] and schema cases
+# without ../samples or specs/schemas); ctest then reports the test as skipped instead of failed.
+catch_discover_tests(atsc3_unit PROPERTIES LABELS unit SKIP_RETURN_CODE 4)
