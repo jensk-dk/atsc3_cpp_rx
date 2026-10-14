@@ -109,8 +109,9 @@ private:
         std::vector<std::uint8_t> head;        // the 14-byte MFU DU header of the first fragment (FT=2)
         std::vector<std::uint8_t> bytes;       // DU header + payload so far
     };
-    struct Mpu {
-        std::uint32_t seq = 0;
+    struct Mpu {                               // always built in place (emplace): moving a fresh Mpu, whose `moof`
+        Mpu(std::uint32_t s, std::int64_t t) noexcept : seq(s), first_ns(t) {}   // is disengaged, trips GCC 11's
+        std::uint32_t seq = 0;                 // -Wmaybe-uninitialized at -O3 (the release preset builds with -Werror)
         std::int64_t first_ns = 0;
         std::vector<std::uint8_t> moof_du;     // moof + mdat header as received
         std::optional<media::MoofInfo> moof;

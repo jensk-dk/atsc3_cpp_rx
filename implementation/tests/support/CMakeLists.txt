@@ -6,4 +6,4 @@ target_compile_definitions(atsc3_test_support PUBLIC
   ATSC3_CORPUS_DIR="${ATSC3_CORPUS_DIR}"
   ATSC3_SCHEMA_DIR="${ATSC3_SCHEMA_DIR}"
   ATSC3_VECTOR_DIR="${CMAKE_SOURCE_DIR}/tests/vectors")
-atsc3_set_warnings(atsc3_test_support)
+atsc3_set_test_warnings(atsc3_test_support)

@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 An ATSC 3.0 client-side (receiver) protocol stack in C++17: the specification and its implementation.
 The repository holds:
 
-- `ATSC3_CLIENT_STACK_SPEC.md` — the specification (currently v0.27). It is the source of truth for
+- `ATSC3_CLIENT_STACK_SPEC.md` — the specification (currently v0.29). It is the source of truth for
   architecture, module behaviour, ingest formats, the pcap virtual tuner, the optional web server /
   Vue 3 frontend and VLC plugin integrations, test strategy and open questions (Section 11). Bump its
   version line at the top when editing it (git history is the change log); new findings from captures go
@@ -138,7 +138,12 @@ The repository holds:
   Tests tagged `[corpus]` read `../samples` and skip when it is absent; `[pacing]` tests measure real
   time (a few hundred ms each) — run `atsc3_unit "~[corpus]"` for a fast loop. Test helpers (packet
   builders, `lct.hpp` LCT builder, `RecordingSink`) live in `implementation/tests/support/`. Run the
-  `asan` preset before declaring a layer done.
+  `asan` preset before declaring a layer done, and build the `release` preset before pushing: GCC 11's
+  `-Wmaybe-uninitialized`, `-Wnull-dereference` and `-Wstringop-*` only fire at -O2/-O3 (e.g. on a fresh struct with
+  a disengaged `std::optional` member moved into a container), the debug preset never sees them and CI builds release
+  with `-Werror`. Test targets use `atsc3_set_test_warnings()` (cmake/CompilerWarnings.cmake), which drops the
+  null-dereference and stringop warnings on GCC because test idioms trip them falsely; library, tools and
+  integrations keep the full set and must stay clean at -O3.
 
 The directory is not a git repository.
 

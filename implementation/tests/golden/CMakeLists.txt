@@ -2,7 +2,7 @@
 # item 2 and the Section 9 baselines). Registered only when the corpus directory exists.
 add_executable(atsc3_golden golden_main.cpp scan_test.cpp)
 target_link_libraries(atsc3_golden PRIVATE atsc3_test_support Catch2::Catch2WithMain)
-atsc3_set_warnings(atsc3_golden)
+atsc3_set_test_warnings(atsc3_golden)
 if(EXISTS "${ATSC3_CORPUS_DIR}")
   catch_discover_tests(atsc3_golden PROPERTIES LABELS golden)
 else()

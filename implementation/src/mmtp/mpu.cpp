@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <iterator>
 
 #include "atsc3/io/inet.hpp"
 
@@ -178,21 +179,17 @@ MpuAssembler::Mpu& MpuAssembler::mpuFor(std::uint32_t seq, std::int64_t t_ns) {
         pending_discontinuity_ = true;
     }
     ++stats_.mpus;
-    Mpu m;
-    m.seq = seq;
-    m.first_ns = t_ns;
-    // keep the deque in sequence order (a lower number must never sit behind higher ones)
-    auto pos = mpus_.end();
+    // built in place at the back, then rotated into sequence order (a lower number must never sit behind higher
+    // ones); see the note on Mpu for why no local Mpu is moved in
+    mpus_.emplace_back(seq, t_ns);
+    auto pos = std::prev(mpus_.end());
     while (pos != mpus_.begin() && static_cast<std::int32_t>(seq - std::prev(pos)->seq) < 0) --pos;
-    mpus_.insert(pos, std::move(m));
+    std::rotate(pos, std::prev(mpus_.end()), mpus_.end());
     evictCount();
     for (Mpu& x : mpus_)
         if (x.seq == seq) return x;
     // the new MPU was itself evicted (the deque was full of newer ones): give the caller a fresh, newest slot
-    Mpu scratch;
-    scratch.seq = seq;
-    scratch.first_ns = t_ns;
-    mpus_.push_back(std::move(scratch));
+    mpus_.emplace_back(seq, t_ns);
     return mpus_.back();
 }
 

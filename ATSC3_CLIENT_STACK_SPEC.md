@@ -1,6 +1,6 @@
 # ATSC 3.0 Client-Side Stack — Software Specification (C++17)
 
-Version 0.28 — 2026-10-14
+Version 0.29 — 2026-10-14
 Status: Draft for review
 
 This document specifies a receiver-side ("client") ATSC 3.0 protocol stack written in C++17.
@@ -2297,7 +2297,8 @@ implementation/
 │   ├── Options.cmake               ATSC3_BUILD_TOOLS, ATSC3_BUILD_TESTS, ATSC3_TUNER_PCAP, ATSC3_TUNER_SONY, ATSC3_WEB, ATSC3_VLC, ATSC3_STB,
 │   │                               ATSC3_SECURITY (OpenSSL), ATSC3_FRONTEND (npm build), ATSC3_FUZZ,
 │   │                               ATSC3_SANITIZERS, ATSC3_COVERAGE, ATSC3_CORPUS_DIR (default ../samples)
-│   ├── CompilerWarnings.cmake      -Wall -Wextra -Wpedantic -Werror, per-target function atsc3_set_warnings()
+│   ├── CompilerWarnings.cmake      -Wall -Wextra -Wpedantic -Werror, per-target atsc3_set_warnings(); test targets take
+│   │                               atsc3_set_test_warnings(), without GCC's optimizer-only null-dereference/stringop warnings
 │   ├── Sanitizers.cmake / Coverage.cmake / Fuzzing.cmake
 │   ├── Dependencies.cmake          find_package(ZLIB, OpenSSL, PkgConfig) + FetchContent for pinned
 │   │                               pugixml, Catch2, cpp-httplib, IXWebSocket (only when enabled)
